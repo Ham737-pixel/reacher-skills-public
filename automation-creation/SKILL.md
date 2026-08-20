@@ -56,7 +56,8 @@ claims.
 ```
 automation_name           <- segment_name from the manifest
 creators_to_include        { "list_upload": <handles> }  OR  { "lists_selected": [<list_id>] }
-schedule                   10,000 on every one of the seven days, timezone America/Los_Angeles
+schedule                   10,000 on every one of the seven days, timezone America/Los_Angeles,
+                           start_time AND end_time (both or neither; one alone is a 422)
 is_evergreen               true
 exclude_previously_messaged true  (under creators_to_exclude)
 idempotency_key            deterministic UUID from shop + segment + week + floor
@@ -96,6 +97,9 @@ fails. Do not call the API on a bad payload.
 - `message` is 1 to 500 characters and does not contain the word "amazon" (the portal
   rejects it).
 - every `commission_rate` is between 0 and 1 (0.15 for 15 percent, not 15).
+- the schedule sets `start_time` and `end_time` together. Sending one without the other
+  fails with `422 schedule.start_time and end_time must both be set or both omitted`.
+  Portal-created automations can show only a start time, so do not copy their shape.
 - the schedule sets every day's cap to 10,000 (never a smaller throttle like 30; that was
   the throttle bug above). Reject any day above 10,000, and flag any day below it.
 - exactly one creator-selection mode is populated.

@@ -30,7 +30,7 @@ Then confirm these four things with the user before running searches (one short 
 
 1. Quality floors. Default: creator GMV above $100 and post rate above 60%. State these defaults explicitly and ask if they want different filters (follower range, engagement rate, avg views, etc.). Don't silently apply defaults without telling them, since the brand may have stricter or looser standards.
 
-   Quote the cost of these floors, because it is much larger than it looks. Post rate is on a 0-100 scale, not 0-1. On a measured US Food & Beverage export of 1,717 rows: the $100 GMV floor alone cut it to 439 (26%), and adding post rate >= 60 cut it to 197 (11.5%). Relaxing post rate to 20 while holding GMV at $100 gives 307. If a brand needs thousands of creators, the floors are the first lever to discuss, not the last — say so up front rather than delivering a 90-creator list and letting them discover it.
+   Quote the cost of these floors, because it is larger than it looks. Post rate is on a 0-100 scale, not 0-1: `60` means 60 percent. Measured on a US Food & Beverage shop with server-side filters: GMV >= $2,000 alone returns 2,907 on-category creators, and adding post rate >= 60 takes it to 1,778. On the Sports & Outdoor category the same pair returns 6,330. Floors are the first lever to discuss when a brand needs volume, not the last, so say so up front rather than delivering a small list and letting them discover it.
 2. Exclusions. Ask whether to exclude creators the brand already works with, and which definition they mean: (a) active affiliate creators of the shop, (b) creators who already received a TC invite, (c) creators who already received a sample, or any combination. Different brands mean different things by "already ours", so the brand should clarify this rather than the skill assuming.
 3. Anything unusual about the audience (region, language, content style) that should shape keywords.
 4. Competitors. Ask whether they want competitor affiliates included (default: yes if SI is available) and whether they can name the brand's direct competitors. If they can't, propose candidates yourself: `get_sellers` filtered to the client's category, sorted by gmv28d, cross-checked against the client's products, and confirm the shortlist before mining. Don't mine sellers the user hasn't confirmed as competitors, since adjacent-category giants pollute the pool.
@@ -67,9 +67,20 @@ Run every enabled mode with every relevant variant. The workhorse is bulk export
 
 1. Profile search: `export_creators` once per keyword variant (up to 50K rows per call, includes gmv_segment and post_rate columns).
 
-   Column trap, verified against the live API: a QUERY-mode export populates `post_rate` / `engagement_rate` / `average_views`. A BROWSE-mode export (no `query`) leaves all three EMPTY and carries the same signals under `fulfillment_rate_segment` / `engagement_rate_segment` / `video_views_segment` instead. Any post-rate floor therefore drops all 50,000 browse rows and reports zero qualified — a silent total failure that looks like an empty niche. `process_export.py` handles the fallback and labels which column each row came from; never hand-roll the floor check on a browse export.
+   **Pass the floors server-side using these exact field paths.** The endpoint accepts a `filters` object in the portal search-filter shape, and it now REJECTS unrecognized fields with a 400 that names the offending path. Guessing field names is the single most expensive mistake in this skill: a wrong name used to be accepted and silently ignored, which returned an unfiltered pool that then got cut to a few hundred rows client-side.
 
-   Also verified: the `categories` filter is silently IGNORED on `export_creators` (a categories-filtered browse export came back byte-identical to the unfiltered one). `gmv_segment` IS honoured server-side, though it leaks a little. Filter GMV server-side, filter category client-side, and never report a category-filtered export as targeted without checking. For a query you haven't validated yet, pull page 1 of `search_creators` first as a cheap preview: if more than half the page is brand accounts, resellers, or off-category creators, the query is wrong (see the failure shapes in Step 2), so rebuild it before exporting, since a 50K export of junk poisons the raw CSV. Once a query previews clean, export it, save the tool result to a file, and run `scripts/process_export.py` on it to apply the floors and append qualifiers to `raw/keyword.csv`; it prints total vs qualified per query so you can report yields. Fall back to paginated `search_creators` only if the export endpoint is unavailable on the key.
+   | Filter | Path | Value |
+   | --- | --- | --- |
+   | GMV | `performance.gmv` | `{"min": 2000}` numeric dollars |
+   | Post rate | `performance.post_rate` | `{"min": 60}` on a 0-100 scale |
+   | Category | `creators.product_categories` | `["Sports & Outdoor"]` |
+   | Followers | `creators.followers` | numeric range |
+
+   `performance.fulfillment_rate` returns a 400; the export wants `post_rate`. The automations filter endpoint calls the same metric `fulfillment_rate` (labelled "Post Rate") and the CSV returns both `post_rate` and `fulfillment_rate_segment`, so confirm which surface you are on before naming the field. Call `automation_filters` for the shop region to get valid category values.
+
+   Server-side filters hold to roughly 0.1 percent leakage (8 rows below the floor out of 6,330 on a measured run), so `process_export.py` still re-checks every row. That is a safety net now, not the primary filter.
+
+   For a query you haven't validated yet, pull page 1 of `search_creators` first as a cheap preview: if more than half the page is brand accounts, resellers, or off-category creators, the query is wrong (see the failure shapes in Step 2), so rebuild it before exporting, since a 50K export of junk poisons the raw CSV. Once a query previews clean, export it, save the tool result to a file, and run `scripts/process_export.py` on it to apply the floors and append qualifiers to `raw/keyword.csv`; it prints total vs qualified per query so you can report yields. Fall back to paginated `search_creators` only if the export endpoint is unavailable on the key.
 2. Transcript search (if enabled): `search_transcript` with spoken-phrase variants. Consider `match_sources: ["audio", "video"]` to also match on-screen text. No export exists for this mode, so keep it to 1-2 pages per query as topical seasoning on top of the export base, and append each page's qualifiers to `raw/transcript.csv` immediately (same 9-column header as process_export.py writes) before requesting the next page; page payloads are too heavy to hold several in context and transcribe at the end.
 3. Video search (if enabled): `search_video` with visual-description variants. Same 1-2 page discipline. Expect low yield: video matching surfaces many brand accounts and low-post-rate profiles, so a page with one or two qualifiers is normal, not a sign the query failed.
 4. Lookalike search (if enabled). Seed with TikTok HANDLES, never internal creator IDs: an ID seed silently returns zero results with no error, which looks like an empty niche when it's actually a malformed seed. Run MULTIPLE seed passes, not one:
@@ -86,9 +97,9 @@ Run every enabled mode with every relevant variant. The workhorse is bulk export
    - Saturation check: if a same-niche competitor yields very few creators past the floors and a large share are already the client's affiliates, the audiences overlap heavily; deprioritize that competitor and spend the calls on larger adjacent sellers instead.
    - Spot-check bios for region mismatches (e.g. a creator in the UK universe whose bio says NZ) before the list ships.
 
-All AI search endpoints (profile, transcript, video, lookalike) accept a `filters` object with the same shape as portal search filters. Pass the agreed GMV/post rate/follower floors server-side anyway, but treat them as a pre-filter only: in practice they leak (rows below both floors come back on every mode, worst in video), which is exactly why `process_export.py` re-applies the floors on every export row and why hand-appended transcript/video/lookalike rows must be checked against the floors before they go into the raw CSVs. SI competitor filters (`min_gmv`, `min_post_rate` on `get_seller_creators`) are reliable and can be trusted server-side.
+All AI search endpoints (profile, transcript, video, lookalike) accept the same `filters` object documented in Step 3. Pass the agreed GMV / post rate / follower floors server-side on every mode. They are honoured to roughly 0.1 percent leakage on export, but transcript / video / lookalike results still need a client-side check before hand-appended rows go into the raw CSVs. SI competitor filters (`min_gmv`, `min_post_rate` on `get_seller_creators`) use their own names and are reliable server-side.
 
-Note the metric shape difference between sourcing surfaces: exports report GMV as segment strings (`gmv_segment`, e.g. "$100-$1K"), while paged AI search results report numeric lifetime `gmv`. `process_export.py` compares floors against the segment's lower bound; for paged results, compare the numeric value directly.
+Exports now return a numeric `gmv` column alongside `gmv_segment`. Always filter on numeric `gmv`. `gmv_segment` is a rounded display string (e.g. `$2.1K`, `$1.9M`) and is NOT a band, so never parse it for a floor: an earlier version of this skill compared floors against a band's lower bound, and a $2,000 floor silently discarded every creator between $2,000 and $5,000. `process_export.py` reads numeric `gmv` and falls back to parsing `gmv_segment` only for exports saved before the column existed.
 
 ### Volume: as many as we can find
 
@@ -98,16 +109,18 @@ In regions where only profile mode is enabled (no lookalike/transcript/video), t
 
 ### The high-volume recipe
 
-When a shop needs thousands of creators per run rather than hundreds, run this before escalating anything else. Measured on a US Food & Beverage shop:
+When a shop needs thousands of creators per run rather than hundreds, filter server-side in ONE call rather than harvesting broadly and cutting client-side. Measured on a US Food & Beverage shop:
 
-| Step | Call | Result |
-| --- | --- | --- |
-| Targeted query export | `export_creators(query=...)` | 1,717 raw -> 197 at gmv$100/pr60 |
-| Browse export, GMV filtered server-side | `export_creators(filters={gmv_segment:[...]})` | 50,000 raw (the cap) |
-| ...category filtered client-side to the shop's L2 | on the CSV, not the API | 3,837 |
-| ...post rate >= 60 via the fallback column | `process_export.py` | **2,202 qualified from ONE call** |
+| Filters passed | Result |
+| --- | --- |
+| `performance.gmv.min = 2000` | 46,754 creators |
+| + `creators.product_categories = ["Food & Beverages"]` | 2,907 |
+| + `performance.post_rate.min = 60` | **1,778 qualified in one call** |
+| same pair on `["Sports & Outdoor"]` | **6,330 qualified in one call** |
 
-One browse call at the brand's strictest floors returns roughly 11x what a single targeted query returns, and it is the fastest way off a 70-100-creator run. Two caveats to state whenever you use it: browse results are untargeted (only 7.7% of that 50K touched Food & Beverages), so the client-side category filter is mandatory, and the rows carry `post_rate_source=fulfillment_rate_segment` rather than a true post rate. Combine one browse pull with 20-30 targeted query exports to clear 5,000+ net-new before dedupe.
+A returned row count below the 50,000 cap means the filtered set is complete rather than truncated, so a count like 6,330 is the real size of that segment's pool, not a page of it. Report it as such.
+
+Two habits this replaces. Do NOT pull the broad universe and filter the CSV afterwards: it wastes the 50,000-row cap on off-category rows. Do NOT set a floor that you then apply by parsing `gmv_segment`. Filter numerically, server-side, in the call.
 
 When the pool runs thin, escalate the cheapest lever first: (1) relax the floors with the user's OK, since dropping a GMV floor one tier often multiplies the addressable pool many times over; (2) broaden to adjacent niches and identities; (3) reseed lookalike from different creator subsets; (4) as a deliberate last resort, omit the query entirely on `search_creators`/`export_creators`, which switches to browse mode and returns the region's top creators unfiltered by topic. Browse mode trades targeting for raw volume, so only use it knowingly and label those rows' source query as "browse" so the client can treat them differently in outreach.
 
