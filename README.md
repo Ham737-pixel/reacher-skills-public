@@ -90,10 +90,11 @@ continues on what it can still reach.
 `creator-sourcing/scripts/` carries three helpers so the data handling isn't
 reinvented (buggily) on each run:
 
-- `process_export.py` — parses an export result, applies the quality floors,
-  and appends qualifiers to a per-method CSV. Handles the column-name
-  difference between query-mode and browse-mode exports, which otherwise
-  silently discards every browse row.
+- `process_export.py` — parses an export result, re-checks the quality
+  floors, and appends qualifiers to a per-method CSV. Floors should be
+  passed server-side on the export call; this is the client-side safety
+  net for the small fraction that leaks through. Still parses older
+  exports saved before the numeric `gmv` column existed.
 - `finalize_lists.py` — global dedupe, exclusion filtering, final per-method
   CSV output.
 - `route_to_automation.py` — scores a sourced batch against existing
