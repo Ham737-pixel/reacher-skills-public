@@ -117,11 +117,33 @@ In precise mode there is no fixed volume target; the goal is to exhaust the pool
 
 In regions where only profile mode is enabled (no lookalike/transcript/video), this matters even more: profile search is carrying the entire run, so double the variant count by default. Stop a query only when results go clearly off-topic or start repeating.
 
+### Do NOT put a GMV floor on AI search results
+
+This is the single biggest mistake available in this skill, and it silently destroys a run.
+
+In the AI search index, **GMV and units_sold are unpopulated for about 90% of creators**. Measured on the query `fitness`: 10,168 creators returned, **9,105 had `gmv` exactly 0** and 9,057 of those had a real non-zero `post_rate`, with follower counts running all the way to 1M+. A creator with 250K followers and a 4% post rate has obviously sold something. The zero is missing data, not a real zero.
+
+So a GMV floor applied to AI search does not filter for quality. It filters for *whether the GMV column happens to be populated*, and throws away the entire long tail:
+
+| Filters on the `fitness` query | Creators | With a fitness bio |
+| --- | --- | --- |
+| `gmv >= 2000` + `post_rate >= 60` | 37 | 26 |
+| `gmv >= 2000` only | 84 | 53 |
+| `post_rate >= 60`, no GMV floor | 235 | 157 |
+| `post_rate >= 40`, no GMV floor | 380 | 260 |
+| no floors at all | 10,168 | **6,130** |
+
+The targeting was never the problem: 60% of the unfiltered result set has a fitness bio. The GMV floor was removing 99.6% of a good pool for having a blank column.
+
+**What to do instead.** On AI search modes (profile, transcript, video, lookalike), filter on `post_rate`, `follower_count` and `engagement_rate`, which ARE populated. Use GMV as a *sort*, or as a post-hoc label, never as a floor. If the user asks for a GMV floor, tell them what it costs on this surface and offer post rate plus followers as the substitute.
+
+Browse mode is the exception. The top-50K browse universe has GMV populated on essentially every row, so a GMV floor is safe and meaningful there. That is why bulk filters can use `gmv` and AI search cannot.
+
 ### Precise vs bulk: pick the mode before you search
 
 These are two different jobs and they use two different mechanisms. Ask which one the user wants in the Step 1 message, because the answer changes everything downstream.
 
-**Precise** is what the rest of this skill does: AI search across profile, transcript, video and lookalike modes, plus competitor mining, producing lists of named handles that genuinely match the niche. Expect **hundreds, not thousands**. Measured on a US Food & Beverage shop targeting fitness creators at GMV >= $2,000 and post rate >= 60: a single keyword query matches 3,456 creators, of which 137 clear the GMV floor and **62** clear both. Six or seven rounds across all modes plus competitor mining lands around **700 net-new**, and that is close to exhaustive for that niche at those floors, not a failure.
+**Precise** is what the rest of this skill does: AI search across profile, transcript, video and lookalike modes, plus competitor mining, producing lists of named handles that genuinely match the niche. Filtered correctly (post rate and followers, no GMV floor) a single broad query yields **hundreds of on-niche creators**, and a full multi-mode run reaches into the low thousands. Filtered with a GMV floor it collapses to tens, for the reasons in the section above. Measured on a US Food & Beverage shop targeting fitness creators at GMV >= $2,000 and post rate >= 60: a single keyword query matches 3,456 creators, of which 137 clear the GMV floor and **62** clear both. Six or seven rounds across all modes plus competitor mining lands around **700 net-new**, and that is close to exhaustive for that niche at those floors, not a failure.
 
 **Bulk** does not use AI search at all. It hands the automation a filter and lets Reacher resolve it against the whole creator universe on every run. Use `creators_to_include.filters` on `automation_create_target_collab` or `automation_update`, with `is_evergreen: true` so it re-evaluates continuously. Verified working field set:
 
