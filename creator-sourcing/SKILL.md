@@ -26,7 +26,9 @@ Pull context before searching:
 - `products_list` for the shop: note the top products by GMV and the product category (L2 category). This anchors keyword generation in what the shop actually sells.
 - If the user hasn't described the target audience/demographic, infer a starting point from the product catalog and confirm it: "Looks like this shop sells X in the Y category. Am I right that the target creator profile is Z?"
 
-Then confirm these four things with the user before running searches (one short message, not an interrogation):
+Then confirm these five things with the user before running searches (one short message, not an interrogation):
+
+0. **Precise or bulk?** Ask this first, because it decides which mechanism runs. Precise means AI search for creators who genuinely match the niche, and lands in the hundreds. Bulk means a category-and-performance filter the automation re-resolves every run, and reaches tens of thousands but cannot target a topic. Put the tradeoff in one sentence and let them choose; if they want both, run them as two separate automations so the results stay comparable. See "Precise vs bulk" below for the numbers to quote.
 
 1. Quality floors. Default: creator GMV above $100 and post rate above 60%. State these defaults explicitly and ask if they want different filters (follower range, engagement rate, avg views, etc.). Don't silently apply defaults without telling them, since the brand may have stricter or looser standards.
 
@@ -103,24 +105,35 @@ Exports now return a numeric `gmv` column alongside `gmv_segment`. Always filter
 
 ### Volume: as many as we can find
 
-There is no fixed volume target; the goal is to exhaust the pool. Search totals tell you the ceiling: if a query reports thousands of matches, page 1 is a skim, not the harvest. Keep going until additional pages and variants stop producing new on-topic creators: pull pages 2-5+ of the strongest queries, build out 6-10 keyword variants, then broaden to adjacent angles (e.g. for a wig brand: braids, extensions, GRWM beauty, 40+ beauty). Expect floors to cut 30-50% of raw results, so overshoot on raw volume.
+In precise mode there is no fixed volume target; the goal is to exhaust the pool, and the pool is smaller than people expect. Do NOT promise thousands from AI search. Quote the measured shape instead: roughly 60-140 qualifying creators per keyword query at a $2,000 GMV floor, converging on several hundred net-new for a niche after all modes and competitor mining. If the user needs thousands, that is a bulk-mode conversation, not more keyword rounds. Search totals tell you the ceiling: if a query reports thousands of matches, page 1 is a skim, not the harvest. Keep going until additional pages and variants stop producing new on-topic creators: pull pages 2-5+ of the strongest queries, build out 6-10 keyword variants, then broaden to adjacent angles (e.g. for a wig brand: braids, extensions, GRWM beauty, 40+ beauty). Expect floors to cut 30-50% of raw results, so overshoot on raw volume.
 
 In regions where only profile mode is enabled (no lookalike/transcript/video), this matters even more: profile search is carrying the entire run, so double the variant count by default. Stop a query only when results go clearly off-topic or start repeating.
 
-### The high-volume recipe
+### Precise vs bulk: pick the mode before you search
 
-When a shop needs thousands of creators per run rather than hundreds, filter server-side in ONE call rather than harvesting broadly and cutting client-side. Measured on a US Food & Beverage shop:
+These are two different jobs and they use two different mechanisms. Ask which one the user wants in the Step 1 message, because the answer changes everything downstream.
 
-| Filters passed | Result |
+**Precise** is what the rest of this skill does: AI search across profile, transcript, video and lookalike modes, plus competitor mining, producing lists of named handles that genuinely match the niche. Expect **hundreds, not thousands**. Measured on a US Food & Beverage shop targeting fitness creators at GMV >= $2,000 and post rate >= 60: a single keyword query matches 3,456 creators, of which 137 clear the GMV floor and **62** clear both. Six or seven rounds across all modes plus competitor mining lands around **700 net-new**, and that is close to exhaustive for that niche at those floors, not a failure.
+
+**Bulk** does not use AI search at all. It hands the automation a filter and lets Reacher resolve it against the whole creator universe on every run. Use `creators_to_include.filters` on `automation_create_target_collab` or `automation_update`, with `is_evergreen: true` so it re-evaluates continuously. Verified working field set:
+
+| Field | Shape |
 | --- | --- |
-| `performance.gmv.min = 2000` | 46,754 creators |
-| + `creators.product_categories = ["Food & Beverages"]` | 2,907 |
-| + `performance.post_rate.min = 60` | **1,778 qualified in one call** |
-| same pair on `["Sports & Outdoor"]` | **6,330 qualified in one call** |
+| `gmv` | `{"min": 2000}` |
+| `post_rate` | `{"min": 60}` |
+| `engagement_rate`, `units_sold`, `average_views` | `{"min": N}` |
+| `product_categories` | `["Sports & Outdoor", "Health"]` |
+| `follower_count`, `gender` | range / list |
 
-A returned row count below the 50,000 cap means the filtered set is complete rather than truncated, so a count like 6,330 is the real size of that segment's pool, not a page of it. Report it as such.
+The API translates these into the portal's filter shape (`Performance.GMV: ["custom:2000-"]`) and stamps `creator_source_type: "filters"`.
 
-Two habits this replaces. Do NOT pull the broad universe and filter the CSV afterwards: it wastes the 50,000-row cap on off-category rows. Do NOT set a floor that you then apply by parsing `gmv_segment`. Filter numerically, server-side, in the call.
+**The honest tradeoff, and do not hide it from the user.** Bulk filters have no topical targeting. There is no community, hashtag, topic or interest field on the API's filter set, so the only relevance lever is product category, and category is a weak proxy for a niche. Measured: of 6,330 creators matching `Sports & Outdoor` + GMV >= $2,000 + post rate >= 60, only **10%** had anything fitness-related in their bio. 87% were fashion, shoes, home and general-shopping accounts carrying a sports tag. So bulk buys volume by accepting that most recipients are adjacent rather than on-niche.
+
+Say that plainly rather than reporting a filter's reach as if it were a targeted list. A run that returns 700 precise creators is not worse than one that reaches 20,000 loose ones; they are answers to different questions.
+
+**Previewing a bulk filter's reach.** The dry run does NOT report a projected count. To size a filter before committing, create the automation with `dry_run: false` (it is created stopped, so nothing sends), then read `creators_remaining` from `automation_detail`. Report that number, then ask whether to start it. Never start it yourself.
+
+**Combining them.** The strongest pattern is bulk for reach plus precise for quality, as two separate automations with different messages, so the results stay comparable. Do not pour a precise list into a bulk automation; you lose the ability to tell which one worked.
 
 When the pool runs thin, escalate the cheapest lever first: (1) relax the floors with the user's OK, since dropping a GMV floor one tier often multiplies the addressable pool many times over; (2) broaden to adjacent niches and identities; (3) reseed lookalike from different creator subsets; (4) as a deliberate last resort, omit the query entirely on `search_creators`/`export_creators`, which switches to browse mode and returns the region's top creators unfiltered by topic. Browse mode trades targeting for raw volume, so only use it knowingly and label those rows' source query as "browse" so the client can treat them differently in outreach.
 
@@ -197,7 +210,7 @@ Do not send any invites, DMs, or samples from this skill. Sourcing ends at the s
 ## Practical notes
 
 - Write results to container files incrementally after each search (the bundled scripts do this for exports; append transcript/video/lookalike qualifiers by hand as you go). Never compile the final lists from conversation context at the end: context is lossy at this volume and transcription errors creep in. The exclusion handle set should also live in a file, one handle per line.
-- Volume floor: a run that delivers fewer than ~500 net-new creators past the floors is incomplete for any established niche; overshoot raw volume accordingly (floors cut 30-50%). Report each search's `total` ceiling in the summary.
+- Do not treat a few hundred net-new as a failed run. At a $2,000 GMV floor with a 60% post-rate floor, the floors remove about 98% of every AI-search result set, so several hundred qualified creators for a niche is the expected shape. Report each search's `total` ceiling alongside the qualified count so the user can see where the cut happened, and name the floors as the lever rather than running more rounds against an exhausted pool.
 - Volume goal is "as many as possible", so err on the side of more keyword variants, not fewer. Stop a query when results go clearly off-topic or repeat.
 - If two clarifying answers conflict (e.g. "no floors" but also "only proven sellers"), surface the conflict instead of guessing.
 - If list creation is unavailable (read-only key) or fails, fall back to per-method CSVs (works for all modes) or `export_creators` (profile-mode only), and tell the user which path was used.
