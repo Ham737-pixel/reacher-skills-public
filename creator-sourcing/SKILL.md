@@ -28,7 +28,15 @@ Pull context before searching:
 
 Then confirm these five things with the user before running searches (one short message, not an interrogation):
 
-0. **Precise or bulk?** Ask this first, because it decides which mechanism runs. Precise means AI search for creators who genuinely match the niche, and lands in the hundreds. Bulk means a category-and-performance filter the automation re-resolves every run, and reaches tens of thousands but cannot target a topic. Put the tradeoff in one sentence and let them choose; if they want both, run them as two separate automations so the results stay comparable. See "Precise vs bulk" below for the numbers to quote.
+0. **Precise or bulk?** This decides which mechanism runs, so settle it before anything else. Read the request for an explicit signal first, and only ask if there isn't one.
+
+   **Go straight to BULK** when the request says any of: "bulk", "as many as possible", "max reach", "maximum volume", "fill the automation", "keep it topped up", "evergreen", "don't need them to be exactly X", "broad", or names a volume target above ~2,000 creators ("we need 10k a day", "I need thousands"). A stated daily-outreach target that precise mode cannot feed is itself a bulk signal.
+
+   **Go straight to PRECISE** when the request says: "creators who specifically", "hand-picked", "vetted", "high quality only", "must actually be X", "niche", or names a target in the hundreds.
+
+   **Otherwise ask**, in one line with the tradeoff attached: precise finds creators who genuinely match the niche and lands in the hundreds; bulk reaches tens of thousands but can only filter on category and performance, so most recipients will be adjacent rather than on-niche. Which do you want?
+
+   Note that naming a niche is NOT a mode signal. "Source fitness creators" is ambiguous: it says what to target, not how many or how tightly. Do not read a niche as precise by default; ask. If the user wants both, run them as two separate automations so the results stay comparable. See "Precise vs bulk" below for the numbers to quote.
 
 1. Quality floors. Default: creator GMV above $100 and post rate above 60%. State these defaults explicitly and ask if they want different filters (follower range, engagement rate, avg views, etc.). Don't silently apply defaults without telling them, since the brand may have stricter or looser standards.
 
@@ -130,6 +138,8 @@ The API translates these into the portal's filter shape (`Performance.GMV: ["cus
 **The honest tradeoff, and do not hide it from the user.** Bulk filters have no topical targeting. There is no community, hashtag, topic or interest field on the API's filter set, so the only relevance lever is product category, and category is a weak proxy for a niche. Measured: of 6,330 creators matching `Sports & Outdoor` + GMV >= $2,000 + post rate >= 60, only **10%** had anything fitness-related in their bio. 87% were fashion, shoes, home and general-shopping accounts carrying a sports tag. So bulk buys volume by accepting that most recipients are adjacent rather than on-niche.
 
 Say that plainly rather than reporting a filter's reach as if it were a targeted list. A run that returns 700 precise creators is not worse than one that reaches 20,000 loose ones; they are answers to different questions.
+
+**Bulk always goes into a NEW automation. Never convert an existing one.** The three targeting modes (lists, filters, crm_group) are mutually exclusive, so setting `creators_to_include.filters` on an automation that currently uses lists silently DISCARDS every attached list and uploaded handle. Verified on a live automation holding 5 sourced lists plus 57 uploads: a dry-run update with filters returned `lists_selected: []` and `list_upload: []`, with no error and no warning. If the user points bulk at an automation that already has lists, stop and say what it would destroy, then offer a new automation instead. Setting filters also flips `is_evergreen` to true.
 
 **Previewing a bulk filter's reach.** The dry run does NOT report a projected count. To size a filter before committing, create the automation with `dry_run: false` (it is created stopped, so nothing sends), then read `creators_remaining` from `automation_detail`. Report that number, then ask whether to start it. Never start it yourself.
 
