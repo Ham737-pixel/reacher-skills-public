@@ -38,9 +38,21 @@ Then confirm these five things with the user before running searches (one short 
 
    Note that naming a niche is NOT a mode signal. "Source fitness creators" is ambiguous: it says what to target, not how many or how tightly. Do not read a niche as precise by default; ask. If the user wants both, run them as two separate automations so the results stay comparable. See "Precise vs bulk" below for the numbers to quote.
 
-1. Quality floors. Default: creator GMV above $100 and post rate above 60%. State these defaults explicitly and ask if they want different filters (follower range, engagement rate, avg views, etc.). Don't silently apply defaults without telling them, since the brand may have stricter or looser standards.
+1. Quality floors. **There is no default post rate. The user sets it, and you quote the cost before they do.** This is a real tradeoff and it is theirs to make, not yours to assume.
 
-   Quote the cost of these floors, because it is larger than it looks. Post rate is on a 0-100 scale, not 0-1: `60` means 60 percent. Measured on a US Food & Beverage shop with server-side filters: GMV >= $2,000 alone returns 2,907 on-category creators, and adding post rate >= 60 takes it to 1,778. On the Sports & Outdoor category the same pair returns 6,330. Floors are the first lever to discuss when a brand needs volume, not the last, so say so up front rather than delivering a small list and letting them discover it.
+   Post rate is on a 0-100 scale, not 0-1: `60` means 60 percent. It is the share of sample requests the creator actually fulfilled with a post, so a high floor really does select for reliable creators. It is also the most destructive filter in the skill on AI search. Present the choice with the measured numbers for the surface you are on:
+
+   | Post rate floor | AI search (`fitness`) | Browse mode (Sports & Outdoor + Health, GMV >= $2k) |
+   | --- | --- | --- |
+   | none | 10,781 | 17,378 |
+   | `>= 10` | 1,048 | — |
+   | `>= 60` | **279** | **9,573** |
+
+   The asymmetry is the point. On browse mode a 60 floor costs about 45% of the pool and is usually worth it. On AI search it costs **97%**, because only 1,048 of 10,781 creators clear even 10. Ask it as a plain question: *"Do you want only creators with a proven fulfillment record, or maximum reach? A 60% post-rate floor gives you roughly 280 creators for this niche instead of 10,800."* Then use what they say.
+
+   If they have no opinion, propose `>= 10` on AI search and `>= 60` on browse mode, and say that is what you are doing. Never apply 60 to an AI-search run silently — that single choice is what produced months of "the lists are too small" complaints.
+
+   Same conversation for GMV, but the answer there is fixed by the data rather than by preference: see "Do NOT put a GMV floor on AI search results" below.
 2. Exclusions. Ask whether to exclude creators the brand already works with, and which definition they mean: (a) active affiliate creators of the shop, (b) creators who already received a TC invite, (c) creators who already received a sample, or any combination. Different brands mean different things by "already ours", so the brand should clarify this rather than the skill assuming.
 3. Anything unusual about the audience (region, language, content style) that should shape keywords.
 4. Competitors. Ask whether they want competitor affiliates included (default: yes if SI is available) and whether they can name the brand's direct competitors. If they can't, propose candidates yourself: `get_sellers` filtered to the client's category, sorted by gmv28d, cross-checked against the client's products, and confirm the shortlist before mining. Don't mine sellers the user hasn't confirmed as competitors, since adjacent-category giants pollute the pool.
@@ -117,6 +129,23 @@ In precise mode there is no fixed volume target; the goal is to exhaust the pool
 
 In regions where only profile mode is enabled (no lookalike/transcript/video), this matters even more: profile search is carrying the entire run, so double the variant count by default. Stop a query only when results go clearly off-topic or start repeating.
 
+### Query length is the volume dial — set it from the mode
+
+Result-set size collapses with query specificity, before a single filter is applied. This is not a filter effect and no amount of relaxing floors recovers it. Measured on one US shop, same index, same day:
+
+| Query | Words | Matches |
+| --- | --- | --- |
+| `fitness` | 1 | 10,899 |
+| `family snacks` | 2 | 2,151 |
+| `fitness creators who talk about protein and macros` | 8 | 2,351 |
+| `busy moms packing school lunchboxes and family snacks` | 8 | 277 |
+
+A 39x swing from phrasing alone. So:
+
+- **Bulk / volume runs: one or two words.** Nouns, not sentences. `fitness`, `keto`, `family snacks`. Write the descriptive version into the *outreach copy*, never into the query.
+- **Precise runs: full sentences are correct** — that is exactly when you want a small, tight set.
+- Never write a long descriptive query and then blame the floors when it returns 200 rows. Check `pagination.total` on a cheap `search_creators` call with `page_size: 1` before exporting; if the total is in the hundreds and the user wanted thousands, shorten the query and re-check before doing anything else.
+
 ### Do NOT put a GMV floor on AI search results
 
 This is the single biggest mistake available in this skill, and it silently destroys a run.
@@ -128,10 +157,12 @@ So a GMV floor applied to AI search does not filter for quality. It filters for 
 | Filters on the `fitness` query | Creators | With a fitness bio |
 | --- | --- | --- |
 | `gmv >= 2000` + `post_rate >= 60` | 37 | 26 |
-| `gmv >= 2000` only | 84 | 53 |
-| `post_rate >= 60`, no GMV floor | 235 | 157 |
-| `post_rate >= 40`, no GMV floor | 380 | 260 |
-| no floors at all | 10,168 | **6,130** |
+| `gmv >= 2000` only | 83 | 53 |
+| `post_rate >= 60`, no GMV floor | 279 | 236 |
+| `post_rate >= 10`, no GMV floor | 1,048 | — |
+| no floors at all | 10,781 | **7,713** |
+
+Re-measured 2026-09-01: 10,781 rows returned, 9,725 with `gmv` exactly 0 (90.2%), and 9,667 of those carrying a real non-zero post rate. The shape has been stable across every re-test.
 
 The targeting was never the problem: 60% of the unfiltered result set has a fitness bio. The GMV floor was removing 99.6% of a good pool for having a blank column.
 
@@ -223,6 +254,37 @@ Why the margin gate exists, measured on two real segments from one shop: a batch
 | 3 | TC Cleanup automation | `automation_create_tc_cleanup` | Purpose-built re-targeting of creators who got a TC invite and did not accept, scoped by `invite_start_before_days` (invite sent at least N days ago) and `invite_expire_after_days` (expiring within N days). |
 
 Recommended default for a re-engagement pass: `exclude_previously_messaged: false`, `auto_resolve_conflicts: MOVE_NOT_ACCEPTED`, and a TC Cleanup automation with `invite_start_before_days: 14` for the never-accepted tail. Setting 3 is an existing automation type, so routing into it still goes through Step 6 rather than creating one here.
+
+### Before you conclude anything is off: read `status_message`, never `is_evergreen`
+
+**`is_evergreen` does not tell you whether an automation is live.** The tool documentation says it does. It is wrong, and believing it makes a healthy account look dead. Verified on a live shop: eight automations carrying `is_evergreen: false` and `status: "Completed"` had all run that same day.
+
+Classify from `status_message`:
+
+| `status_message` contains | Real state |
+| --- | --- |
+| "will restart when new creators enter the CRM Group" | **Live.** CRM-triggered drip, armed, waiting for new members. |
+| "will re-check for new creators matching your filters" | **Live.** Filter-backed evergreen, armed. |
+| "Today's outreach is complete" | **Live.** Sending, currently capped by the shop's daily limit. |
+| "Automation is running" | **Live.** Mid-run. |
+| "Automation has finished." | Done. Will not resume on its own. |
+| "Automation stopped." | Off. Someone stopped it. |
+| "Edit automation end date or create a new automation" | Done, expired end date. |
+
+Never report an automation as inactive on the strength of `status: "Completed"` alone. If you need to be certain, call `automations_list` with a `start_date`/`end_date` covering the last day or two and check whether the row shows in-window `creators_reached`.
+
+**Also: never read the `aggregate` block on a windowed `automations_list` call.** It is broken. On a one-day window it returned `creators_reached: 0` while the rows in the same response summed to 8,707; on an eight-day window it returned 10,996 against roughly 30,000 in rows. Sum the rows yourself, and cross-check the day's total against `automation_outreach_capacity.daily_creators_used`.
+
+### TC Cleanup does not recur — put it on a calendar
+
+TC Cleanup is a one-shot automation. There is no evergreen flag for it, nothing re-arms it, and once it reports "Automation has finished." it will never run again. A shop sending thousands of TC invites a day accumulates a stale, never-accepted invite pool the moment the last cleanup completes.
+
+So on every re-engagement pass:
+
+1. List the shop's `TC Cleanup` automations and find the newest `created_at`.
+2. If it is more than ~30 days old, say so with the number of days, and propose a new one before anything else. On one live shop the last cleanup had run 56 days earlier while roughly 7,700 invites a day were going out.
+3. Create it with the same `invite_start_before_days` the shop used last time (7 and 14 are both common) rather than inventing a new value.
+4. Tell the user explicitly that it will not repeat and needs re-creating on a cadence. This is the single most commonly forgotten automation in the product.
 
 State which of the three is in play in the run summary. A list built with `exclude_previously_messaged: false` is not comparable to one built with it `true`, and quietly switching it makes week-over-week volume look like a sourcing win when it is a settings change.
 
