@@ -17,6 +17,7 @@ list into an outreach automation" becomes one sentence instead of an afternoon.
 | --- | --- |
 | **creator-sourcing** | Sources net-new affiliate creators using multi-mode AI search (profile, transcript, video, lookalike), competitor-affiliate mining, keyword variation, and lookalike seeding off your own top performers. Excludes creators you already work with, applies quality floors, reports remaining runway per segment, and writes the result out as Reacher lists. |
 | **competitor-analysis** | Identifies a brand's top 5 competitors via product mapping, then breaks down what they are doing — top products, video formats, hooks, creator strategy — pulls category-wide trends, benchmarks the brand against ecosystem peers, and ends in prioritized recommendations. |
+| **brief-creation** | Builds the creator brief that tells creators what to film, as an image poster or a video-derived document. Groups the catalogue into pack families, grounds the copy in the hooks and structure that actually earned on your own videos, renders a preview you can look at before anything ships, and attaches it to the automation that reaches creators at the Sample Approved stage. |
 | **automation-creation** | Turns a sourced batch of creators into one Target Collab outreach automation. Fills a known-good template, runs a preflight check and a dry run, creates the automation **stopped**, returns the ID, and then asks whether to start it. It never starts an automation on its own. |
 
 They are designed to run in sequence — source, then analyze the competitive
