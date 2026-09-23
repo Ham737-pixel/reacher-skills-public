@@ -1,0 +1,19 @@
+{
+  "name": "reacher-skills",
+  "owner": { "name": "Reacher" },
+  "plugins": [
+    {
+      "name": "reacher-skills",
+      "source": "./",
+      "description": "Reacher+ skills: sourcing, automations, briefs, competitor analysis, Discord posts",
+      "strict": false,
+      "skills": [
+        "./automation-creation",
+        "./brief-creation",
+        "./competitor-analysis",
+        "./creator-sourcing",
+        "./discord-content-post"
+      ]
+    }
+  ]
+}
